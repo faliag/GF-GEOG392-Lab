@@ -53,6 +53,5 @@ arcpy.management.CopyFeatures("Structures", os.path.join(OUTPUT_DB_PATH, "FinalS
 arcpy.management.CopyFeatures(buffer_output, os.path.join(OUTPUT_DB_PATH, "FinalGarageBuffer"))
 arcpy.management.CopyFeatures(intersect_output, os.path.join(OUTPUT_DB_PATH, "FinalIntersectedStructures"))
 
-
 #If everthing works well, the output will say:
 print("It Works!")
