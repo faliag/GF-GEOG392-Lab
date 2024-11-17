@@ -3,55 +3,84 @@ import os
 
 # Setup base directory
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+arcpy.env.workspace = BASE_DIR
 
-### Input paths
-INPUT_DB_PATH = r"C:\Users\gfali\.ssh\GF-GEOG392-Lab\Labs\Lab4\Lab4_Data\Campus.gdb"
-CSV_PATH = r"C:\Users\gfali\.ssh\GF-GEOG392-Lab\Labs\Lab4\Lab4_Data\garages.csv"
-OUTPUT_DB_PATH = r"C:\Users\gfali\.ssh\GF-GEOG392-Lab\Labs\Lab4\Lab4_Data\Lab4.gdb"
+# Define the paths based on your provided details
+GDB_Folder = r"C:\\Users\\gfali\\.ssh\\GF-GEOG392-Lab\\Labs\\Lab5"
+GDB_Name = "Lab5.gdb"
+Garage_CSV_File = r"C:\\Users\\gfali\\.ssh\\GF-GEOG392-Lab\\Labs\\Lab5\\garages.csv"
+Garage_Layer_Name = "garages"
+Campus_GDB = r"C:\\Users\\gfali\\.ssh\\GF-GEOG392-Lab\\Labs\\Lab5\\Campus.gdb"
+Selected_Garage_Name = "Northside Parking Garage"
+Buffer_Radius = "150 meters"
 
-# Set the workspace to the input GDB
-arcpy.env.workspace = INPUT_DB_PATH
+# Create GDB if it doesn't exist
+GDB_Full_Path = os.path.join(GDB_Folder, GDB_Name)
+if not arcpy.Exists(GDB_Full_Path):
+    arcpy.management.CreateFileGDB(GDB_Folder, GDB_Name)
 
-# Layers need to be kept
-layers_to_keep = ["GaragePoints", "LandUse", "Structures", "Trees"]
+# Load the CSV data into a feature layer
+garages = arcpy.management.MakeXYEventLayer(
+    Garage_CSV_File,
+    "X",  # X coordinate from the CSV
+    "Y",  # Y coordinate from the CSV
+    Garage_Layer_Name
+)
 
-# List all feature classes
-feature_classes = arcpy.ListFeatureClasses()
+# Check if the garages layer was created successfully
+if arcpy.Exists(garages):
+    print(f"Garages layer created successfully: {garages}")
+else:
+    print("Failed to create garages layer.")
 
-# Delete other classes not in layers_to_keep
-for fc in feature_classes:
-    if fc not in layers_to_keep:
-        arcpy.management.Delete(fc)
+# Convert the layer to a feature class and add to the GDB
+arcpy.FeatureClassToGeodatabase_conversion(garages, GDB_Full_Path)
 
-# Create output GDB if it doesn't exist: Created earlier as Lab4.gdb
-if not os.path.exists(OUTPUT_DB_PATH):
-    arcpy.management.CreateFileGDB(os.path.dirname(OUTPUT_DB_PATH), os.path.basename(OUTPUT_DB_PATH))
+# Path to the "Structures" feature class in Campus.gdb
+structures = os.path.join(Campus_GDB, "Structures")
 
-# Loading the .csv file to input GDB as a Point Feature Layer
-garage_points_layer = "GaragePoints"
-if not arcpy.Exists(garage_points_layer):
-    arcpy.management.XYTableToPoint(CSV_PATH, os.path.join(INPUT_DB_PATH, garage_points_layer), "Longitude", "Latitude")
+# Define the SQL query to select the garage by its name (using LotName here as per your setup)
+where_clause = f"LotName = '{Selected_Garage_Name}'"
+print(f"Using where_clause: {where_clause}")
 
-# Print spatial references
-print(f"Before Buffer and Intersect...")
-print(f"GaragePoints layer spatial reference: {arcpy.Describe(garage_points_layer).spatialReference.name}.")
-print(f"Structures layer spatial reference: {arcpy.Describe('Structures').spatialReference.name}.")
+# SearchCursor to verify if the garage exists in the LotName field
+cursor = arcpy.da.SearchCursor(structures, ["BldgName"], where_clause)
+shouldProceed = False
+for row in cursor:
+    print(f"Checking: {row[0]}")  # Debugging: print each building name
+    if row[0].strip().lower() == Selected_Garage_Name.strip().lower():
+        shouldProceed = True
+        break
 
-# As we can see that the spatial references match, no need to re-project. Continuing to buffer and intersect.
+# Proceed if the garage exists in the Structures dataset
+if shouldProceed:
+    # Delete the existing selected garage feature class if it exists
+    selected_garage_layer_name = os.path.join(Campus_GDB, "selected_garage")
+    if arcpy.Exists(selected_garage_layer_name):
+        arcpy.management.Delete(selected_garage_layer_name)
+        print(f"Deleted existing selected garage feature class: {selected_garage_layer_name}")
 
-# Buffer analysis around garages (150 meters)
-buffer_output = os.path.join(OUTPUT_DB_PATH, "GarageBuffer")
-arcpy.analysis.Buffer(garage_points_layer, buffer_output, "150 meters")
+    # Select the garage as a feature layer
+    garage_feature = arcpy.analysis.Select(
+        garages, selected_garage_layer_name, where_clause
+    )
 
-# Intersect analysis (between buffer & Structures)
-intersect_output = os.path.join(OUTPUT_DB_PATH, "Garage_Structures_Intersect")
-arcpy.analysis.Intersect([buffer_output, "Structures"], intersect_output)
+    # Check if the selected garage was saved successfully
+    if arcpy.Exists(selected_garage_layer_name):
+        print(f"Selected garage saved successfully to: {selected_garage_layer_name}")
+    else:
+        print(f"Failed to save selected garage to: {selected_garage_layer_name}")
 
-# Output final layers to the geodatabase, Lab4.gdb
-arcpy.management.CopyFeatures(garage_points_layer, os.path.join(OUTPUT_DB_PATH, "FinalGaragePoints"))
-arcpy.management.CopyFeatures("Structures", os.path.join(OUTPUT_DB_PATH, "FinalStructures"))
-arcpy.management.CopyFeatures(buffer_output, os.path.join(OUTPUT_DB_PATH, "FinalGarageBuffer"))
-arcpy.management.CopyFeatures(intersect_output, os.path.join(OUTPUT_DB_PATH, "FinalIntersectedStructures"))
+    # Perform buffer operation around the selected garage (150 meters)
+    garage_buff_name = os.path.join(GDB_Folder, "buffered_garage")
+    arcpy.analysis.Buffer(garage_feature, garage_buff_name, Buffer_Radius)
+    print(f"Buffer operation completed: {garage_buff_name}")
 
-#If everthing works well, the output will say:
-print("It Works!")
+    # Perform clip operation (intersect the buffered garage with Structures)
+    clip_output = os.path.join(GDB_Folder, "clipped_output")
+    arcpy.analysis.Clip(garage_buff_name, structures, clip_output)
+    print(f"Clip operation completed: {clip_output}")
+
+    print("Success: The buffer and clip operations completed.")
+else:
+    print("Error: The specified garage name does not exist in the LotName field.")
