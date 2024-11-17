@@ -115,18 +115,18 @@ class Lab5_Tool(object):
         arcpy.AddMessage(f"Selected_Garage_Name: {Selected_Garage_Name}")
         arcpy.AddMessage(f"Buffer_Radius: {Buffer_Radius}")
 
-        # Hardcoded paths (using \\ for Windows compatibility)
+        # path
         GDB_Folder = r"C:\\Users\\gfali\\.ssh\\GF-GEOG392-Lab\\Labs\\Lab5"
         Campus_GDB = r"C:\\Users\\gfali\\.ssh\\GF-GEOG392-Lab\\Labs\\Lab5\\Campus.gdb"
         Garage_CSV_File = r"C:\\Users\\gfali\\.ssh\\GF-GEOG392-Lab\\Labs\\Lab5\\garages.csv"
         GDB_Name = "Lab5.gdb"  # You can also set this dynamically if needed.
 
-        # Create the output GDB if it doesn't exist
+        # Create the output GDB if non-existing
         GDB_Full_Path = os.path.join(GDB_Folder, GDB_Name)
         if not arcpy.Exists(GDB_Full_Path):
             arcpy.management.CreateFileGDB(GDB_Folder, GDB_Name)
 
-        # Import garage CSV and create XY event layer
+        # Import garage CSV and create XY layer
         garages = arcpy.management.MakeXYEventLayer(Garage_CSV_File, "X", "Y", Garage_Layer_Name)
         arcpy.FeatureClassToGeodatabase_conversion(garages, GDB_Full_Path)
 
